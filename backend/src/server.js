@@ -368,3 +368,6 @@ app.listen(PORT, () => {
   console.log('Instagram Account ID:', IG_ACCOUNT_ID ? 'Loaded ✅' : 'Missing ❌');
   console.log('Instagram Token:', IG_TOKEN ? 'Loaded ✅' : 'Missing ❌');
 });
+app.get("/", (req, res) => {
+  res.send("Instagram Scheduler is live 🚀");
+});
