@@ -29,12 +29,15 @@
   <div class="wrap">
     <div class="card">
       <h1>🚀 لوحة جدولة إنستغرام</h1>
-      <div class="small">ارفعي صورة أو عدة صور، واختاري نشر الآن أو جدولة يومية بالترتيب.</div>
+      <div class="small">التوقيت المستخدم: الكويت Asia/Kuwait</div>
+
       <form id="scheduleForm">
         <label>الصور</label>
         <input type="file" name="images" accept="image/*" multiple required />
+
         <label>الكابشن</label>
         <textarea name="caption" placeholder="اكتبي الكابشن هنا..."></textarea>
+
         <div class="row">
           <div>
             <label>طريقة النشر</label>
@@ -48,20 +51,25 @@
             <input type="datetime-local" name="publishTime" />
           </div>
         </div>
+
         <button type="submit">حفظ / نشر</button>
       </form>
+
       <div id="message" class="msg"></div>
     </div>
+
     <div class="card">
       <h2>📋 المنشورات</h2>
       <button onclick="loadPosts()">تحديث القائمة</button>
       <div id="posts"></div>
     </div>
   </div>
+
 <script>
 const form = document.getElementById("scheduleForm");
 const message = document.getElementById("message");
 const postsBox = document.getElementById("posts");
+const KUWAIT_TZ = "Asia/Kuwait";
 
 function showMessage(text, ok = true) {
   message.className = "msg " + (ok ? "ok" : "err");
@@ -71,14 +79,17 @@ function showMessage(text, ok = true) {
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   showMessage("جاري الرفع... انتظري", true);
+
   const data = new FormData(form);
   try {
     const res = await fetch("/api/schedule", { method: "POST", body: data });
     const json = await res.json();
+
     if (!res.ok || !json.ok) {
       showMessage("خطأ: " + (json.message || "حدث خطأ"), false);
       return;
     }
+
     showMessage("تم بنجاح ✅\n" + json.message, true);
     form.reset();
     loadPosts();
@@ -87,30 +98,55 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
+function formatKuwaitTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: KUWAIT_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  }).format(d).replace(",", "");
+}
+
 async function loadPosts() {
   postsBox.innerHTML = "جاري التحميل...";
   try {
-    const res = await fetch("/api/posts");
+    const res = await fetch("/api/posts?ts=" + Date.now());
     const posts = await res.json();
+
     if (!posts.length) {
       postsBox.innerHTML = "<p>لا توجد منشورات حتى الآن.</p>";
       return;
     }
+
     postsBox.innerHTML = `
       <table>
-        <thead><tr><th>Image</th><th>Status</th><th>Scheduled</th><th>Caption</th><th>Error</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Image</th>
+            <th>Status</th>
+            <th>Scheduled Kuwait Time</th>
+            <th>Caption</th>
+            <th>Error</th>
+          </tr>
+        </thead>
         <tbody>
           ${posts.map(p => `
             <tr>
               <td><a href="${p.imageUrl}" target="_blank"><img class="thumb" src="${p.imageUrl}"></a></td>
               <td>${p.status}</td>
-              <td>${p.scheduledAt ? new Date(p.scheduledAt).toLocaleString() : ""}</td>
+              <td>${formatKuwaitTime(p.scheduledAt)}</td>
               <td>${escapeHtml(p.caption || "")}</td>
               <td>${escapeHtml(p.error || "")}</td>
             </tr>
           `).join("")}
         </tbody>
-      </table>`;
+      </table>
+    `;
   } catch (err) {
     postsBox.innerHTML = "خطأ في تحميل القائمة: " + err.message;
   }
@@ -118,9 +154,14 @@ async function loadPosts() {
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (m) => ({
-    "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;"
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
   }[m]));
 }
+
 loadPosts();
 </script>
 </body>
