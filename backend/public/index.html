@@ -14,6 +14,8 @@
     textarea { min-height:110px; resize:vertical; }
     button { background:#2563eb; color:white; border:none; cursor:pointer; font-weight:bold; margin-top:18px; }
     button:hover { background:#1d4ed8; }
+    .delete-btn { background:#dc2626; padding:8px 10px; margin-top:0; font-size:13px; }
+    .delete-btn:hover { background:#b91c1c; }
     .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
     .msg { margin-top:14px; padding:12px; border-radius:10px; display:none; white-space:pre-wrap; }
     .ok { background:#dcfce7; color:#166534; display:block; }
@@ -112,6 +114,25 @@ function formatKuwaitTime(value) {
   }).format(d).replace(",", "");
 }
 
+async function deletePost(id) {
+  if (!confirm("هل تريدين حذف هذا المنشور من الجدولة؟")) return;
+
+  try {
+    const res = await fetch("/api/posts/" + id, { method: "DELETE" });
+    const json = await res.json();
+
+    if (!res.ok || !json.ok) {
+      showMessage("خطأ في الحذف: " + (json.message || "حدث خطأ"), false);
+      return;
+    }
+
+    showMessage("تم حذف المنشور ✅", true);
+    loadPosts();
+  } catch (err) {
+    showMessage("خطأ اتصال أثناء الحذف: " + err.message, false);
+  }
+}
+
 async function loadPosts() {
   postsBox.innerHTML = "جاري التحميل...";
   try {
@@ -132,6 +153,7 @@ async function loadPosts() {
             <th>Scheduled Kuwait Time</th>
             <th>Caption</th>
             <th>Error</th>
+            <th>Delete</th>
           </tr>
         </thead>
         <tbody>
@@ -142,6 +164,7 @@ async function loadPosts() {
               <td>${formatKuwaitTime(p.scheduledAt)}</td>
               <td>${escapeHtml(p.caption || "")}</td>
               <td>${escapeHtml(p.error || "")}</td>
+              <td>${p.status === "published" ? "" : `<button class="delete-btn" onclick="deletePost('${p.id}')">حذف</button>`}</td>
             </tr>
           `).join("")}
         </tbody>
