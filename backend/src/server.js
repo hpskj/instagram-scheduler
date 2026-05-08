@@ -71,7 +71,9 @@ app.post("/api/schedule", upload.array("images", 50), async (req, res) => {
     for (const file of req.files) {
       const imageUrl = await uploadToImgBB(file.path);
       fs.unlink(file.path, () => {});
-      const scheduledAt = mode === "now" ? new Date() : new Date(nextDate);
+      const scheduledAt = mode === "now"
+        ? new Date()
+        : new Date(nextDate + "+03:00");
       posts.push({ id: makeId(), originalName:file.originalname, imageUrl, caption, status: mode === "now" ? "ready_now" : "queued", scheduledAt: scheduledAt.toISOString(), createdAt: new Date().toISOString(), publishedAt:null, instagramPostId:null, error:null });
       if (mode !== "now") { nextDate.setDate(nextDate.getDate()+1); nextDate.setHours(DAILY_PUBLISH_HOUR, DAILY_PUBLISH_MINUTE, 0, 0); }
     }
