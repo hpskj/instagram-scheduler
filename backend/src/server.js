@@ -3,6 +3,7 @@ import multer from "multer";
 import cors from "cors";
 import fs from "fs";
 import path from "path";
+import { createClient } from "@supabase/supabase-js";
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -13,18 +14,20 @@ const ACCESS_TOKEN =
   process.env.FACEBOOK_PAGE_ACCESS_TOKEN ||
   process.env.ACCESS_TOKEN;
 
-const IMGBB_KEY =
-  process.env.IMGBB_API_KEY ||
-  process.env.IMGBB_KEY ||
-  process.env.API_KEY ||
-  process.env.IMAGE_API_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_BUCKET = process.env.SUPABASE_BUCKET || "post-media";
 
 const DAILY_PUBLISH_HOUR = Number(process.env.DAILY_PUBLISH_HOUR || 9);
 const DAILY_PUBLISH_MINUTE = Number(process.env.DAILY_PUBLISH_MINUTE || 0);
 const CHECK_EVERY_MINUTE = String(process.env.CHECK_EVERY_MINUTE || "true") === "true";
 
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
 app.use(cors());
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 const publicPath = path.join(process.cwd(), "public");
@@ -39,13 +42,29 @@ app.use(express.static(publicPath));
 
 const upload = multer({
   dest: uploadsDir,
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: 150 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = [
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/webp",
+      "video/mp4",
+      "video/quicktime",
+    ];
+
+    if (allowed.includes(file.mimetype)) return cb(null, true);
+    cb(new Error("Only image files and MP4/MOV videos are allowed"));
+  },
 });
 
 function readPosts() {
   if (!fs.existsSync(dbFile)) return [];
-  try { return JSON.parse(fs.readFileSync(dbFile, "utf8")); }
-  catch { return []; }
+  try {
+    return JSON.parse(fs.readFileSync(dbFile, "utf8"));
+  } catch {
+    return [];
+  }
 }
 
 function writePosts(posts) {
@@ -54,6 +73,20 @@ function writePosts(posts) {
 
 function makeId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function getMediaType(file) {
+  return file.mimetype.startsWith("video/") ? "video" : "image";
+}
+
+function getFileExtension(file) {
+  const ext = path.extname(file.originalname || "").toLowerCase();
+  if (ext) return ext;
+  if (file.mimetype === "video/mp4") return ".mp4";
+  if (file.mimetype === "video/quicktime") return ".mov";
+  if (file.mimetype === "image/png") return ".png";
+  if (file.mimetype === "image/webp") return ".webp";
+  return ".jpg";
 }
 
 function nextDailyDate() {
@@ -77,36 +110,74 @@ function getNextQueuedDate() {
   return next;
 }
 
-async function uploadToImgBB(filePath) {
-  if (!IMGBB_KEY) throw new Error("IMGBB_API_KEY is missing in Railway Variables");
-
-  const imageBase64 = fs.readFileSync(filePath).toString("base64");
-  const body = new URLSearchParams();
-  body.append("key", IMGBB_KEY);
-  body.append("image", imageBase64);
-
-  const res = await fetch("https://api.imgbb.com/1/upload", {
-    method: "POST",
-    body,
-  });
-
-  const json = await res.json();
-  if (!res.ok || !json.success) {
-    throw new Error(JSON.stringify(json));
+async function uploadToSupabase(file) {
+  if (!supabase) {
+    throw new Error("SUPABASE_URL or SUPABASE_ANON_KEY is missing in Railway Variables");
   }
 
-  return json.data.url;
+  const mediaType = getMediaType(file);
+  const ext = getFileExtension(file);
+  const safeName = (file.originalname || "upload")
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .slice(0, 80);
+
+  const fileName = `${mediaType}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${safeName}${safeName.endsWith(ext) ? "" : ext}`;
+  const fileBuffer = fs.readFileSync(file.path);
+
+  const { error } = await supabase.storage
+    .from(SUPABASE_BUCKET)
+    .upload(fileName, fileBuffer, {
+      contentType: file.mimetype,
+      upsert: false,
+    });
+
+  fs.unlink(file.path, () => {});
+
+  if (error) throw new Error(`Supabase upload failed: ${error.message}`);
+
+  const { data } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(fileName);
+
+  return {
+    url: data.publicUrl,
+    mediaType,
+    storagePath: fileName,
+  };
 }
 
-async function publishToInstagram(imageUrl, caption = "") {
+async function savePostToSupabase(post) {
+  if (!supabase) return;
+
+  const { error } = await supabase.from("scheduled_posts").insert({
+    caption: post.caption,
+    media_url: post.mediaUrl,
+    media_type: post.mediaType,
+    video_url: post.mediaType === "video" ? post.mediaUrl : null,
+    thumbnail_url: post.thumbnailUrl || null,
+    scheduled_for: post.scheduledAt,
+    status: post.status,
+    instagram_post_id: post.instagramPostId || null,
+  });
+
+  if (error) {
+    console.error("SUPABASE DB INSERT ERROR:", error.message);
+  }
+}
+
+async function publishToInstagram(mediaUrl, caption = "", mediaType = "image") {
   if (!IG_USER_ID) throw new Error("INSTAGRAM_ACCOUNT_ID is missing");
   if (!ACCESS_TOKEN) throw new Error("INSTAGRAM_ACCESS_TOKEN is missing");
 
   const createBody = new URLSearchParams({
-    image_url: imageUrl,
     caption,
     access_token: ACCESS_TOKEN,
   });
+
+  if (mediaType === "video") {
+    createBody.append("media_type", "REELS");
+    createBody.append("video_url", mediaUrl);
+  } else {
+    createBody.append("image_url", mediaUrl);
+  }
 
   const createRes = await fetch(`https://graph.facebook.com/v20.0/${IG_USER_ID}/media`, {
     method: "POST",
@@ -115,6 +186,11 @@ async function publishToInstagram(imageUrl, caption = "") {
 
   const createJson = await createRes.json();
   if (!createRes.ok || !createJson.id) throw new Error(JSON.stringify(createJson));
+
+  // Instagram videos may need processing time before publishing.
+  if (mediaType === "video") {
+    await new Promise((resolve) => setTimeout(resolve, 30000));
+  }
 
   const publishBody = new URLSearchParams({
     creation_id: createJson.id,
@@ -142,7 +218,9 @@ app.get("/health", (req, res) => {
     message: "Instagram Scheduler backend is running ✅",
     instagramAccount: IG_USER_ID ? "Present ✅" : "Missing ❌",
     instagramToken: ACCESS_TOKEN ? "Present ✅" : "Missing ❌",
-    imgbbKey: IMGBB_KEY ? "Present ✅" : "Missing ❌",
+    supabaseUrl: SUPABASE_URL ? "Present ✅" : "Missing ❌",
+    supabaseKey: SUPABASE_ANON_KEY ? "Present ✅" : "Missing ❌",
+    supabaseBucket: SUPABASE_BUCKET,
   });
 });
 
@@ -179,24 +257,28 @@ app.post("/api/schedule", upload.array("images", 50), async (req, res) => {
     const mode = req.body.mode || "daily";
 
     if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ ok: false, message: "No images uploaded" });
+      return res.status(400).json({ ok: false, message: "No media uploaded" });
     }
 
     const posts = readPosts();
     let nextDate = publishTime ? new Date(publishTime) : getNextQueuedDate();
 
     for (const file of req.files) {
-      const imageUrl = await uploadToImgBB(file.path);
-      fs.unlink(file.path, () => {});
+      const uploaded = await uploadToSupabase(file);
 
       const scheduledAt = mode === "now"
         ? new Date()
         : new Date(nextDate + "+03:00");
 
-      posts.push({
+      const post = {
         id: makeId(),
         originalName: file.originalname,
-        imageUrl,
+        mediaUrl: uploaded.url,
+        imageUrl: uploaded.mediaType === "image" ? uploaded.url : null,
+        videoUrl: uploaded.mediaType === "video" ? uploaded.url : null,
+        mediaType: uploaded.mediaType,
+        storagePath: uploaded.storagePath,
+        thumbnailUrl: null,
         caption,
         status: mode === "now" ? "ready_now" : "queued",
         scheduledAt: scheduledAt.toISOString(),
@@ -204,7 +286,10 @@ app.post("/api/schedule", upload.array("images", 50), async (req, res) => {
         publishedAt: null,
         instagramPostId: null,
         error: null,
-      });
+      };
+
+      posts.push(post);
+      await savePostToSupabase(post);
 
       if (mode !== "now") {
         nextDate.setDate(nextDate.getDate() + 1);
@@ -219,7 +304,7 @@ app.post("/api/schedule", upload.array("images", 50), async (req, res) => {
       return res.json({ ok: true, message: "Uploaded and published now", result });
     }
 
-    res.json({ ok: true, message: "Images scheduled successfully", count: req.files.length });
+    res.json({ ok: true, message: "Media scheduled successfully", count: req.files.length });
   } catch (err) {
     console.error("SCHEDULE ERROR:", err);
     res.status(500).json({ ok: false, message: err.message });
@@ -233,7 +318,7 @@ async function publishReadyNow() {
 
   for (const post of ready) {
     try {
-      const ig = await publishToInstagram(post.imageUrl, post.caption);
+      const ig = await publishToInstagram(post.mediaUrl || post.imageUrl || post.videoUrl, post.caption, post.mediaType || "image");
       post.status = "published";
       post.publishedAt = new Date().toISOString();
       post.instagramPostId = ig.id;
@@ -265,7 +350,7 @@ async function publishDuePosts() {
 
   for (const post of due) {
     try {
-      const ig = await publishToInstagram(post.imageUrl, post.caption);
+      const ig = await publishToInstagram(post.mediaUrl || post.imageUrl || post.videoUrl, post.caption, post.mediaType || "image");
       post.status = "published";
       post.publishedAt = new Date().toISOString();
       post.instagramPostId = ig.id;
@@ -291,5 +376,7 @@ app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Instagram Account ID: ${IG_USER_ID ? "Present ✅" : "Missing ❌"}`);
   console.log(`Instagram Token: ${ACCESS_TOKEN ? "Present ✅" : "Missing ❌"}`);
-  console.log(`ImgBB API Key: ${IMGBB_KEY ? "Present ✅" : "Missing ❌"}`);
+  console.log(`Supabase URL: ${SUPABASE_URL ? "Present ✅" : "Missing ❌"}`);
+  console.log(`Supabase Key: ${SUPABASE_ANON_KEY ? "Present ✅" : "Missing ❌"}`);
+  console.log(`Supabase Bucket: ${SUPABASE_BUCKET}`);
 });
