@@ -116,10 +116,10 @@
 </head>
 <body>
   <div class="card">
-    <h1>🚀 نشر وجدولة صور على إنستغرام</h1>
+    <h1>🚀 نشر وجدولة صور وفيديو على إنستغرام</h1>
 
-    <label for="image">نشر صورة الآن</label>
-    <input type="file" id="image" accept="image/*" />
+    <label for="image">نشر صورة أو فيديو الآن</label>
+    <input type="file" id="image" accept="image/*,video/mp4" />
 
     <label for="captionNow">الكابشن للنشر الآن</label>
     <textarea id="captionNow" placeholder="اكتبي الكابشن هنا..."></textarea>
@@ -128,10 +128,10 @@
 
     <hr style="margin: 24px 0;" />
 
-    <label for="images">رفع عدة صور للجدولة اليومية</label>
-    <input type="file" id="images" multiple accept="image/*" />
+    <label for="images">رفع عدة صور أو فيديو للجدولة اليومية</label>
+    <input type="file" id="images" multiple accept="image/*,video/mp4" />
 
-    <label for="captionBulk">الكابشن للصور المجدولة</label>
+    <label for="captionBulk">الكابشن للصور والفيديو المجدولة</label>
     <textarea id="captionBulk" placeholder="اكتبي الكابشن هنا..."></textarea>
 
     <label for="publishTime">وقت النشر اليومي</label>
@@ -140,7 +140,7 @@
     <label for="startDate">تاريخ البداية اختياري</label>
     <input type="date" id="startDate" />
 
-    <button class="btn-schedule" onclick="scheduleBulk()">🗓️ جدولة الصور يومياً</button>
+    <button class="btn-schedule" onclick="scheduleBulk()">🗓️ جدولة الصور والفيديو يومياً</button>
     <button class="btn-clear" onclick="loadScheduledPosts()">🔄 تحديث الجدول</button>
     <button class="btn-clear" onclick="clearScheduledPosts()">🧹 مسح الجدول المؤقت</button>
 
@@ -150,7 +150,7 @@
   </div>
 
   <script>
-    const API_BASE = 'http://localhost:5000';
+    const API_BASE = 'https://instagram-scheduler-production-81b4.up.railway.app';
 
     function setResult(message, type = 'info') {
       const el = document.getElementById('result');
@@ -163,18 +163,19 @@
       const caption = document.getElementById('captionNow').value;
 
       if (!file) {
-        setResult('❌ اختاري صورة أولاً', 'error');
+        setResult('❌ اختاري صورة أو فيديو أولاً', 'error');
         return;
       }
 
       const formData = new FormData();
-      formData.append('image', file);
+      formData.append('media', file);
       formData.append('caption', caption);
+      formData.append('mode', 'now');
 
-      setResult('⏳ جاري النشر الآن...', 'info');
+      setResult('⏳ جاري الرفع والنشر الآن...', 'info');
 
       try {
-        const res = await fetch(`${API_BASE}/api/publish-now`, {
+        const res = await fetch(`${API_BASE}/api/schedule`, {
           method: 'POST',
           body: formData,
         });
@@ -182,7 +183,8 @@
         const data = await res.json();
 
         if (data.ok) {
-          setResult('✅ تم النشر بنجاح', 'success');
+          setResult('✅ تم رفع الملف وطلب النشر بنجاح', 'success');
+          await loadScheduledPosts();
         } else {
           setResult('❌ فشل النشر:\n' + JSON.stringify(data.error || data, null, 2), 'error');
         }
@@ -198,23 +200,24 @@
       const startDate = document.getElementById('startDate').value;
 
       if (!files.length) {
-        setResult('❌ اختاري صور أولاً', 'error');
+        setResult('❌ اختاري صور أو فيديو أولاً', 'error');
         return;
       }
 
       const formData = new FormData();
       for (const file of files) {
-        formData.append('images', file);
+        formData.append('media', file);
       }
 
       formData.append('caption', caption);
       formData.append('publishTime', publishTime);
+      formData.append('mode', 'daily');
       if (startDate) formData.append('startDate', startDate);
 
-      setResult('⏳ جاري رفع وجدولة الصور...', 'info');
+      setResult('⏳ جاري رفع وجدولة الصور والفيديو...', 'info');
 
       try {
-        const res = await fetch(`${API_BASE}/api/schedule-bulk`, {
+        const res = await fetch(`${API_BASE}/api/schedule`, {
           method: 'POST',
           body: formData,
         });
@@ -222,7 +225,7 @@
         const data = await res.json();
 
         if (data.ok) {
-          setResult(`✅ تمت جدولة ${data.count} صورة للنشر اليومي`, 'success');
+          setResult(`✅ تمت الجدولة بنجاح`, 'success');
           await loadScheduledPosts();
         } else {
           setResult('❌ فشلت الجدولة:\n' + JSON.stringify(data.error || data, null, 2), 'error');
@@ -234,12 +237,14 @@
 
     async function loadScheduledPosts() {
       try {
-        const res = await fetch(`${API_BASE}/api/scheduled-posts`);
+        const res = await fetch(`${API_BASE}/api/posts`);
         const data = await res.json();
 
+        const posts = Array.isArray(data) ? data : (data.posts || []);
+
         const box = document.getElementById('scheduledBox');
-        if (!data.ok || !data.posts.length) {
-          box.innerHTML = '<p>لا توجد صور مجدولة حالياً.</p>';
+        if (!posts.length) {
+          box.innerHTML = '<p>لا توجد صور أو فيديو مجدولة حالياً.</p>';
           return;
         }
 
@@ -248,16 +253,18 @@
             <thead>
               <tr>
                 <th>File</th>
+                <th>Media Type</th>
                 <th>Publish At</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              ${data.posts.map(post => `
+              ${posts.map(post => `
                 <tr>
-                  <td>${post.originalName || ''}</td>
-                  <td>${new Date(post.publishAt).toLocaleString()}</td>
-                  <td>${post.status}</td>
+                  <td>${post.originalName || post.id || ''}</td>
+                  <td>${post.mediaType || post.media_type || ''}</td>
+                  <td>${post.scheduledAt ? new Date(post.scheduledAt).toLocaleString() : ''}</td>
+                  <td>${post.status || ''}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -269,13 +276,7 @@
     }
 
     async function clearScheduledPosts() {
-      try {
-        await fetch(`${API_BASE}/api/clear-scheduled`, { method: 'POST' });
-        setResult('✅ تم مسح الجدول المؤقت', 'success');
-        await loadScheduledPosts();
-      } catch (error) {
-        setResult('❌ فشل المسح: ' + error.message, 'error');
-      }
+      setResult('⚠️ المسح غير مفعّل في النسخة الجديدة حفاظاً على الصور والفيديو المجدولة.', 'info');
     }
 
     loadScheduledPosts();
