@@ -147,6 +147,74 @@ async function uploadToSupabase(file) {
   return data.publicUrl;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForInstagramContainer(containerId, maxAttempts = 18, delayMs = 5000) {
+  // Instagram sometimes needs a short processing time before /media_publish works.
+  // This wait fixes: "Media ID is not available" and "media is not ready" errors.
+  for (let i = 0; i < maxAttempts; i++) {
+    await sleep(delayMs);
+
+    const statusRes = await fetch(
+      `https://graph.facebook.com/v20.0/${containerId}?fields=status_code&access_token=${ACCESS_TOKEN}`
+    );
+
+    const statusJson = await statusRes.json();
+
+    if (statusJson.status_code === "FINISHED" || statusJson.status_code === "PUBLISHED") {
+      return true;
+    }
+
+    if (statusJson.status_code === "ERROR") {
+      throw new Error(JSON.stringify(statusJson));
+    }
+
+    // Some image containers do not reliably return status_code.
+    // After a few checks, allow publish retry logic to handle it.
+    if (!statusJson.status_code && i >= 2) {
+      return true;
+    }
+  }
+
+  return true;
+}
+
+async function publishInstagramContainer(containerId) {
+  let lastError = null;
+
+  for (let i = 0; i < 8; i++) {
+    if (i > 0) await sleep(7000);
+
+    const publishBody = new URLSearchParams({
+      creation_id: containerId,
+      access_token: ACCESS_TOKEN,
+    });
+
+    const publishRes = await fetch(`https://graph.facebook.com/v20.0/${IG_USER_ID}/media_publish`, {
+      method: "POST",
+      body: publishBody,
+    });
+
+    const publishJson = await publishRes.json();
+
+    if (publishRes.ok && publishJson.id) {
+      return publishJson;
+    }
+
+    lastError = publishJson;
+    const msg = JSON.stringify(publishJson).toLowerCase();
+
+    // Retry only for Instagram processing delay errors.
+    if (!msg.includes("not ready") && !msg.includes("not available") && !msg.includes("try again")) {
+      break;
+    }
+  }
+
+  throw new Error(JSON.stringify(lastError));
+}
+
 async function publishImageToInstagram(imageUrl, caption = "") {
   if (!IG_USER_ID) throw new Error("INSTAGRAM_ACCOUNT_ID is missing");
   if (!ACCESS_TOKEN) throw new Error("INSTAGRAM_ACCESS_TOKEN is missing");
@@ -165,39 +233,8 @@ async function publishImageToInstagram(imageUrl, caption = "") {
   const createJson = await createRes.json();
   if (!createRes.ok || !createJson.id) throw new Error(JSON.stringify(createJson));
 
-  const publishBody = new URLSearchParams({
-    creation_id: createJson.id,
-    access_token: ACCESS_TOKEN,
-  });
-
-  const publishRes = await fetch(`https://graph.facebook.com/v20.0/${IG_USER_ID}/media_publish`, {
-    method: "POST",
-    body: publishBody,
-  });
-
-  const publishJson = await publishRes.json();
-  if (!publishRes.ok || !publishJson.id) throw new Error(JSON.stringify(publishJson));
-
-  return publishJson;
-}
-
-async function waitForVideoContainer(containerId) {
-  for (let i = 0; i < 12; i++) {
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-
-    const statusRes = await fetch(
-      `https://graph.facebook.com/v20.0/${containerId}?fields=status_code&access_token=${ACCESS_TOKEN}`
-    );
-
-    const statusJson = await statusRes.json();
-
-    if (statusJson.status_code === "FINISHED") return true;
-    if (statusJson.status_code === "ERROR") {
-      throw new Error(JSON.stringify(statusJson));
-    }
-  }
-
-  return true;
+  await waitForInstagramContainer(createJson.id, 6, 5000);
+  return publishInstagramContainer(createJson.id);
 }
 
 async function publishVideoToInstagram(videoUrl, caption = "") {
@@ -219,22 +256,8 @@ async function publishVideoToInstagram(videoUrl, caption = "") {
   const createJson = await createRes.json();
   if (!createRes.ok || !createJson.id) throw new Error(JSON.stringify(createJson));
 
-  await waitForVideoContainer(createJson.id);
-
-  const publishBody = new URLSearchParams({
-    creation_id: createJson.id,
-    access_token: ACCESS_TOKEN,
-  });
-
-  const publishRes = await fetch(`https://graph.facebook.com/v20.0/${IG_USER_ID}/media_publish`, {
-    method: "POST",
-    body: publishBody,
-  });
-
-  const publishJson = await publishRes.json();
-  if (!publishRes.ok || !publishJson.id) throw new Error(JSON.stringify(publishJson));
-
-  return publishJson;
+  await waitForInstagramContainer(createJson.id, 24, 5000);
+  return publishInstagramContainer(createJson.id);
 }
 
 async function publishToInstagram(mediaUrl, caption = "", mediaType = "image") {
@@ -297,6 +320,8 @@ async function handleSchedule(req, res, forcedMode = null) {
 
     const posts = readPosts();
     let nextDate = getScheduleStart(req);
+    const selectedHour = nextDate.getHours();
+    const selectedMinute = nextDate.getMinutes();
     const createdPosts = [];
 
     for (const file of files) {
@@ -334,7 +359,9 @@ async function handleSchedule(req, res, forcedMode = null) {
 
       if (mode !== "now") {
         nextDate.setDate(nextDate.getDate() + 1);
-        nextDate.setHours(DAILY_PUBLISH_HOUR, DAILY_PUBLISH_MINUTE, 0, 0);
+        // Keep the exact time selected by the user for all following days.
+        // This fixes the issue where first post was 04:00 but the rest became 09:00.
+        nextDate.setHours(selectedHour, selectedMinute, 0, 0);
       }
     }
 
