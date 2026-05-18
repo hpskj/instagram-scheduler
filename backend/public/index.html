@@ -63,6 +63,7 @@
     <div class="card">
       <h2>📋 المنشورات</h2>
       <button onclick="loadPosts()">تحديث القائمة</button>
+      <button onclick="deleteSelected()" style="background:#dc2626;margin-right:10px;">حذف المحدد</button>
       <div id="posts"></div>
     </div>
   </div>
@@ -133,6 +134,28 @@ async function deletePost(id) {
   }
 }
 
+async function deleteSelected() {
+  const checked = Array.from(document.querySelectorAll(".post-check:checked"));
+
+  if (!checked.length) {
+    showMessage("اختاري منشور واحد على الأقل", false);
+    return;
+  }
+
+  if (!confirm("هل تريدين حذف المنشورات المحددة؟")) return;
+
+  try {
+    for (const item of checked) {
+      await fetch("/api/posts/" + item.value, { method: "DELETE" });
+    }
+
+    showMessage("تم حذف المنشورات المحددة ✅", true);
+    loadPosts();
+  } catch (err) {
+    showMessage("خطأ أثناء الحذف: " + err.message, false);
+  }
+}
+
 async function loadPosts() {
   postsBox.innerHTML = "جاري التحميل...";
   try {
@@ -148,7 +171,7 @@ async function loadPosts() {
       <table>
         <thead>
           <tr>
-            <th>Image</th>
+            <th>Select</th><th>Image</th>
             <th>Status</th>
             <th>Scheduled Kuwait Time</th>
             <th>Caption</th>
@@ -159,12 +182,13 @@ async function loadPosts() {
         <tbody>
           ${posts.map(p => `
             <tr>
+              <td><input type="checkbox" class="post-check" value="${p.id}"></td>
               <td><a href="${p.imageUrl}" target="_blank"><img class="thumb" src="${p.imageUrl}"></a></td>
               <td>${p.status}</td>
               <td>${formatKuwaitTime(p.scheduledAt)}</td>
               <td>${escapeHtml(p.caption || "")}</td>
               <td>${escapeHtml(p.error || "")}</td>
-              <td>${p.status === "published" ? "" : `<button class="delete-btn" onclick="deletePost('${p.id}')">حذف</button>`}</td>
+              <td><button class="delete-btn" onclick="deletePost('${p.id}')">حذف</button></td>
             </tr>
           `).join("")}
         </tbody>
