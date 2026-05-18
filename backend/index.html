@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Instagram Scheduler</title>
+  <style>
+    body { font-family: Arial, Tahoma, sans-serif; background:#f6f7fb; margin:0; color:#111827; }
+    .wrap { max-width:960px; margin:30px auto; padding:16px; }
+    .card { background:white; border-radius:18px; padding:22px; box-shadow:0 10px 30px rgba(0,0,0,.08); margin-bottom:18px; }
+    h1 { margin:0 0 8px; }
+    label { display:block; margin-top:14px; font-weight:bold; }
+    input, textarea, select, button { width:100%; box-sizing:border-box; padding:12px; border:1px solid #d1d5db; border-radius:10px; margin-top:8px; font-size:15px; }
+    textarea { min-height:110px; resize:vertical; }
+    button { background:#2563eb; color:white; border:none; cursor:pointer; font-weight:bold; margin-top:18px; }
+    button:hover { background:#1d4ed8; }
+    .delete-btn { background:#dc2626; padding:8px 10px; margin-top:0; font-size:13px; }
+    .delete-btn:hover { background:#b91c1c; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .msg { margin-top:14px; padding:12px; border-radius:10px; display:none; white-space:pre-wrap; }
+    .ok { background:#dcfce7; color:#166534; display:block; }
+    .err { background:#fee2e2; color:#991b1b; display:block; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; direction:ltr; }
+    th, td { border-bottom:1px solid #e5e7eb; padding:10px; text-align:left; font-size:13px; vertical-align:top; }
+    img.thumb { width:58px; height:58px; object-fit:cover; border-radius:8px; }
+    .small { color:#6b7280; font-size:13px; }
+    @media (max-width:720px) { .row { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>🚀 لوحة جدولة إنستغرام</h1>
+      <div class="small">التوقيت المستخدم: الكويت Asia/Kuwait</div>
+
+      <form id="scheduleForm">
+        <label>الصور</label>
+        <input type="file" name="images" accept="image/*" multiple required />
+
+        <label>الكابشن</label>
+        <textarea name="caption" placeholder="اكتبي الكابشن هنا..."></textarea>
+
+        <div class="row">
+          <div>
+            <label>طريقة النشر</label>
+            <select name="mode">
+              <option value="daily">جدولة يومية بالترتيب</option>
+              <option value="now">نشر الآن</option>
+            </select>
+          </div>
+          <div>
+            <label>وقت أول صورة</label>
+            <input type="datetime-local" name="publishTime" />
+          </div>
+        </div>
+
+        <button type="submit">حفظ / نشر</button>
+      </form>
+
+      <div id="message" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <h2>📋 المنشورات</h2>
+      <button onclick="loadPosts()">تحديث القائمة</button>
+      <button onclick="deleteSelected()" style="background:#dc2626;margin-right:10px;">حذف المحدد</button>
+      <div id="posts"></div>
+    </div>
+  </div>
+
+<script>
+const form = document.getElementById("scheduleForm");
+const message = document.getElementById("message");
+const postsBox = document.getElementById("posts");
+const KUWAIT_TZ = "Asia/Kuwait";
+
+function showMessage(text, ok = true) {
+  message.className = "msg " + (ok ? "ok" : "err");
+  message.textContent = text;
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  showMessage("جاري الرفع... انتظري", true);
+
+  const data = new FormData(form);
+  try {
+    const res = await fetch("/api/schedule", { method: "POST", body: data });
+    const json = await res.json();
+
+    if (!res.ok || !json.ok) {
+      showMessage("خطأ: " + (json.message || "حدث خطأ"), false);
+      return;
+    }
+
+    showMessage("تم بنجاح ✅\n" + json.message, true);
+    form.reset();
+    loadPosts();
+  } catch (err) {
+    showMessage("خطأ اتصال: " + err.message, false);
+  }
+});
+
+function formatKuwaitTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: KUWAIT_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  }).format(d).replace(",", "");
+}
+
+async function deletePost(id) {
+  if (!confirm("هل تريدين حذف هذا المنشور من الجدولة؟")) return;
+
+  try {
+    const res = await fetch("/api/posts/" + id, { method: "DELETE" });
+    const json = await res.json();
+
+    if (!res.ok || !json.ok) {
+      showMessage("خطأ في الحذف: " + (json.message || "حدث خطأ"), false);
+      return;
+    }
+
+    showMessage("تم حذف المنشور ✅", true);
+    loadPosts();
+  } catch (err) {
+    showMessage("خطأ اتصال أثناء الحذف: " + err.message, false);
+  }
+}
+
+async function deleteSelected() {
+  const checked = Array.from(document.querySelectorAll(".post-check:checked"));
+
+  if (!checked.length) {
+    showMessage("اختاري منشور واحد على الأقل", false);
+    return;
+  }
+
+  if (!confirm("هل تريدين حذف المنشورات المحددة؟")) return;
+
+  try {
+    for (const item of checked) {
+      await fetch("/api/posts/" + item.value, { method: "DELETE" });
+    }
+
+    showMessage("تم حذف المنشورات المحددة ✅", true);
+    loadPosts();
+  } catch (err) {
+    showMessage("خطأ أثناء الحذف: " + err.message, false);
+  }
+}
+
+async function loadPosts() {
+  postsBox.innerHTML = "جاري التحميل...";
+  try {
+    const res = await fetch("/api/posts?ts=" + Date.now());
+    const posts = await res.json();
+
+    if (!posts.length) {
+      postsBox.innerHTML = "<p>لا توجد منشورات حتى الآن.</p>";
+      return;
+    }
+
+    postsBox.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Select</th><th>Image</th>
+            <th>Status</th>
+            <th>Scheduled Kuwait Time</th>
+            <th>Caption</th>
+            <th>Error</th>
+            <th>Delete</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${posts.map(p => `
+            <tr>
+              <td><input type="checkbox" class="post-check" value="${p.id}"></td>
+              <td><a href="${p.imageUrl}" target="_blank"><img class="thumb" src="${p.imageUrl}"></a></td>
+              <td>${p.status}</td>
+              <td>${formatKuwaitTime(p.scheduledAt)}</td>
+              <td>${escapeHtml(p.caption || "")}</td>
+              <td>${escapeHtml(p.error || "")}</td>
+              <td><button class="delete-btn" onclick="deletePost('${p.id}')">حذف</button></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  } catch (err) {
+    postsBox.innerHTML = "خطأ في تحميل القائمة: " + err.message;
+  }
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;"
+  }[m]));
+}
+
+loadPosts();
+</script>
+</body>
+</html>
