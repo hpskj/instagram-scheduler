@@ -330,7 +330,7 @@ async function handleSchedule(req, res, forcedMode = null) {
 
       posts.push(post);
       createdPosts.push(post);
-      await savePostToSupabaseTable(post);
+      // await savePostToSupabaseTable(post);
 
       if (mode !== "now") {
         nextDate.setDate(nextDate.getDate() + 1);
@@ -380,13 +380,13 @@ async function publishReadyNow() {
       post.instagramPostId = ig.id;
       post.error = null;
 
-      await updatePostInSupabaseTable(post);
+      // await updatePostInSupabaseTable(post);
       results.push({ id: post.id, ok: true, instagramPostId: ig.id });
     } catch (err) {
       post.status = "failed";
       post.error = err.message;
 
-      await updatePostInSupabaseTable(post);
+      // await updatePostInSupabaseTable(post);
       results.push({ id: post.id, ok: false, error: err.message });
     }
   }
@@ -421,12 +421,12 @@ async function publishDuePosts() {
       post.instagramPostId = ig.id;
       post.error = null;
 
-      await updatePostInSupabaseTable(post);
+      // await updatePostInSupabaseTable(post);
     } catch (err) {
       post.status = "failed";
       post.error = err.message;
 
-      await updatePostInSupabaseTable(post);
+      // await updatePostInSupabaseTable(post);
       console.error("[scheduler] Failed:", err.message);
     }
   }
@@ -445,6 +445,7 @@ app.get("/health", (req, res) => {
     supabaseUrl: SUPABASE_URL ? "Present ✅" : "Missing ❌",
     supabaseKey: SUPABASE_ANON_KEY ? "Present ✅" : "Missing ❌",
     supabaseBucket: SUPABASE_BUCKET,
+    tableSaving: "Disabled temporarily",
     instagramAccount: IG_USER_ID ? "Present ✅" : "Missing ❌",
     instagramToken: ACCESS_TOKEN ? "Present ✅" : "Missing ❌",
   });
