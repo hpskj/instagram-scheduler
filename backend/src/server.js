@@ -502,14 +502,7 @@ app.delete("/api/posts/:id", (req, res) => {
     return res.status(404).json({ ok: false, message: "Post not found" });
   }
 
-  if (post.status === "published") {
-    return res.status(400).json({
-      ok: false,
-      message: "Cannot delete already published post from this scheduler",
-    });
-  }
-
-  const updated = posts.filter((p) => p.id !== req.params.id);
+    const updated = posts.filter((p) => p.id !== req.params.id);
   writePosts(updated);
 
   res.json({ ok: true, message: "Post deleted successfully ✅" });
