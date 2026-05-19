@@ -62,20 +62,6 @@ function writePosts(posts) {
   fs.writeFileSync(dbFile, JSON.stringify(posts, null, 2));
 }
 
-function normalizePostForClient(post) {
-  return {
-    ...post,
-    mediaUrl: getMediaUrlFromPost(post),
-    mediaType: getMediaTypeFromPost(post),
-  };
-}
-
-function safeDateOrNull(value) {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
 function makeId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -113,7 +99,28 @@ function getMediaUrlFromPost(post) {
 function getMediaTypeFromPost(post) {
   if (post.mediaType) return post.mediaType;
   if (post.videoUrl) return "video";
-  return "image";
+  const url = getMediaUrlFromPost(post) || "";
+  return /\.(mp4|mov|webm)(\?|$)/i.test(url) ? "video" : "image";
+}
+
+
+function normalizePostForClient(post) {
+  return {
+    ...post,
+    scheduledAt: post.scheduledAt || post.publishAt || post.scheduled_for || null,
+    mediaType: getMediaTypeFromPost(post),
+    mediaUrl: getMediaUrlFromPost(post),
+    error: post.error || post.error_message || null,
+  };
+}
+
+function replacePost(id, updater) {
+  const posts = readPosts();
+  const index = posts.findIndex((p) => String(p.id) === String(id));
+  if (index === -1) return null;
+  posts[index] = updater(posts[index]);
+  writePosts(posts);
+  return posts[index];
 }
 
 function getScheduleStart(req) {
@@ -501,56 +508,54 @@ app.get("/api/posts", (req, res) => {
 });
 
 app.get("/api/scheduled-posts", (req, res) => {
-  const posts = readPosts()
-    .map(normalizePostForClient)
-    .sort((a, b) => new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0));
+  const posts = readPosts().sort(
+    (a, b) => new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0)
+  );
 
   res.json({ ok: true, posts });
 });
 
 
 app.patch("/api/posts/:id", (req, res) => {
-  const posts = readPosts();
-  const post = posts.find((p) => p.id === req.params.id);
-
-  if (!post) {
-    return res.status(404).json({ ok: false, message: "Post not found" });
-  }
-
   const { caption, scheduledAt, status } = req.body || {};
 
-  if (typeof caption === "string") {
-    post.caption = caption;
-  }
+  const updated = replacePost(req.params.id, (post) => {
+    const next = { ...post };
 
-  if (scheduledAt !== undefined && scheduledAt !== "") {
-    const d = safeDateOrNull(scheduledAt);
-    if (!d) return res.status(400).json({ ok: false, message: "Invalid scheduledAt date" });
-    post.scheduledAt = d.toISOString();
-    post.publishAt = d.toISOString();
-    if (post.status === "failed" || post.status === "ready_now") post.status = "queued";
-    post.error = null;
-  }
+    if (typeof caption === "string") next.caption = caption;
 
-  if (typeof status === "string") {
-    const allowed = ["queued", "ready_now", "published", "failed"];
-    if (!allowed.includes(status)) {
-      return res.status(400).json({ ok: false, message: "Invalid status" });
+    if (scheduledAt) {
+      const d = new Date(scheduledAt);
+      if (Number.isNaN(d.getTime())) {
+        throw new Error("Invalid scheduledAt date");
+      }
+      next.scheduledAt = d.toISOString();
+      next.publishAt = d.toISOString();
     }
-    post.status = status;
-  }
 
-  writePosts(posts);
-  res.json({ ok: true, message: "Post updated successfully ✅", post: normalizePostForClient(post) });
+    if (status) {
+      const allowed = ["queued", "published", "failed", "ready_now"];
+      if (!allowed.includes(status)) throw new Error("Invalid status");
+      next.status = status;
+      if (status === "queued" || status === "ready_now") {
+        next.error = null;
+        if (status === "queued") next.publishedAt = null;
+      }
+    }
+
+    next.updatedAt = new Date().toISOString();
+    return next;
+  });
+
+  if (!updated) return res.status(404).json({ ok: false, message: "Post not found" });
+  res.json({ ok: true, message: "Post updated successfully ✅", post: normalizePostForClient(updated) });
 });
 
 app.post("/api/posts/:id/publish-now", async (req, res) => {
   const posts = readPosts();
-  const post = posts.find((p) => p.id === req.params.id);
+  const post = posts.find((p) => String(p.id) === String(req.params.id));
 
-  if (!post) {
-    return res.status(404).json({ ok: false, message: "Post not found" });
-  }
+  if (!post) return res.status(404).json({ ok: false, message: "Post not found" });
 
   try {
     const ig = await publishToInstagram(
@@ -563,12 +568,14 @@ app.post("/api/posts/:id/publish-now", async (req, res) => {
     post.publishedAt = new Date().toISOString();
     post.instagramPostId = ig.id;
     post.error = null;
+    post.updatedAt = new Date().toISOString();
     writePosts(posts);
 
-    res.json({ ok: true, message: "Published successfully ✅", instagramPostId: ig.id });
+    res.json({ ok: true, message: "Post published successfully ✅", instagramPostId: ig.id });
   } catch (err) {
     post.status = "failed";
     post.error = err.message;
+    post.updatedAt = new Date().toISOString();
     writePosts(posts);
     res.status(500).json({ ok: false, message: err.message });
   }
@@ -576,42 +583,40 @@ app.post("/api/posts/:id/publish-now", async (req, res) => {
 
 app.post("/api/posts/bulk-delete", (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
-
-  if (!ids.length) {
-    return res.status(400).json({ ok: false, message: "No post IDs provided" });
-  }
+  if (!ids.length) return res.status(400).json({ ok: false, message: "No IDs selected" });
 
   const idSet = new Set(ids);
   const posts = readPosts();
   const updated = posts.filter((p) => !idSet.has(String(p.id)));
   const deleted = posts.length - updated.length;
-
   writePosts(updated);
-  res.json({ ok: true, message: `${deleted} posts deleted successfully ✅`, deleted });
+
+  res.json({ ok: true, message: `Deleted ${deleted} posts successfully ✅`, deleted });
 });
 
 app.post("/api/posts/bulk-status", (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
-  const status = String(req.body?.status || "");
-  const allowed = ["queued", "ready_now", "published", "failed"];
+  const status = req.body?.status;
+  const allowed = ["queued", "published", "failed", "ready_now"];
 
-  if (!ids.length) return res.status(400).json({ ok: false, message: "No post IDs provided" });
+  if (!ids.length) return res.status(400).json({ ok: false, message: "No IDs selected" });
   if (!allowed.includes(status)) return res.status(400).json({ ok: false, message: "Invalid status" });
 
   const idSet = new Set(ids);
   const posts = readPosts();
-  let updatedCount = 0;
+  let changed = 0;
 
   for (const post of posts) {
     if (idSet.has(String(post.id))) {
       post.status = status;
+      post.updatedAt = new Date().toISOString();
       if (status === "queued" || status === "ready_now") post.error = null;
-      updatedCount++;
+      changed++;
     }
   }
 
   writePosts(posts);
-  res.json({ ok: true, message: `${updatedCount} posts updated successfully ✅`, updated: updatedCount });
+  res.json({ ok: true, message: `Updated ${changed} posts successfully ✅`, changed });
 });
 
 app.delete("/api/posts/:id", (req, res) => {
