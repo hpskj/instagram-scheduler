@@ -3,76 +3,75 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Instagram Scheduler</title>
+  <title>Instagram Scheduler Admin</title>
   <style>
-    :root { --blue:#2563eb; --green:#16a34a; --red:#dc2626; --gray:#6b7280; --dark:#111827; --bg:#f6f7fb; --line:#e5e7eb; }
+    :root { --blue:#2563eb; --green:#16a34a; --red:#dc2626; --gray:#6b7280; --bg:#f5f7fb; --card:#fff; --line:#e5e7eb; --dark:#111827; }
     * { box-sizing:border-box; }
-    body { font-family: Arial, Tahoma, sans-serif; background:var(--bg); margin:0; color:var(--dark); }
-    .wrap { max-width:1180px; margin:28px auto; padding:14px; }
-    .card { background:white; border-radius:18px; padding:22px; box-shadow:0 10px 30px rgba(0,0,0,.08); margin-bottom:18px; }
-    h1,h2 { margin:0 0 10px; }
-    label { display:block; margin-top:14px; font-weight:bold; }
-    input, textarea, select, button { width:100%; padding:12px; border:1px solid #d1d5db; border-radius:10px; margin-top:8px; font-size:15px; font-family:inherit; }
-    textarea { min-height:110px; resize:vertical; }
-    button { background:var(--blue); color:white; border:none; cursor:pointer; font-weight:bold; margin-top:18px; transition:.15s; }
-    button:hover { filter:brightness(.92); }
-    button:disabled { opacity:.55; cursor:not-allowed; }
+    body { font-family:Arial,Tahoma,sans-serif; background:var(--bg); margin:0; color:var(--dark); }
+    .wrap { max-width:1180px; margin:24px auto; padding:14px; }
+    .card { background:var(--card); border-radius:22px; padding:22px; box-shadow:0 10px 28px rgba(15,23,42,.08); margin-bottom:18px; border:1px solid rgba(229,231,235,.8); }
+    .topbar { display:flex; gap:12px; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; }
+    h1,h2 { margin:0 0 8px; }
+    .small { color:var(--gray); font-size:13px; }
+    label { display:block; margin-top:14px; font-weight:700; }
+    input,textarea,select,button { width:100%; padding:12px; border:1px solid #d1d5db; border-radius:12px; margin-top:8px; font-size:15px; font-family:inherit; }
+    textarea { min-height:105px; resize:vertical; }
+    button { background:var(--blue); color:white; border:none; cursor:pointer; font-weight:800; transition:.15s; }
+    button:hover { filter:brightness(.92); transform:translateY(-1px); }
+    button:disabled { opacity:.55; cursor:not-allowed; transform:none; }
     .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-    .msg { margin-top:14px; padding:12px; border-radius:10px; display:none; white-space:pre-wrap; direction:rtl; }
+    .msg { margin-top:14px; padding:12px; border-radius:12px; display:none; white-space:pre-wrap; direction:rtl; }
     .ok { background:#dcfce7; color:#166534; display:block; }
     .err { background:#fee2e2; color:#991b1b; display:block; }
-    .small { color:var(--gray); font-size:13px; }
-    .stats-row { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:16px 0; }
-    .stat-box { background:#f9fafb; border:1px solid var(--line); border-radius:14px; padding:12px; text-align:center; }
-    .stat-box span { display:block; font-size:24px; font-weight:800; color:var(--blue); }
-    .stat-box small { color:var(--gray); }
-    .filters-row { display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:10px; align-items:end; margin-bottom:12px; }
-    .actions-row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
-    .actions-row button { width:auto; padding:10px 14px; margin-top:0; }
-    .danger-btn { background:var(--red) !important; }
-    .secondary-btn { background:#4b5563 !important; }
-    .success-btn { background:var(--green) !important; }
-    .tabs { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 4px; }
-    .tab { width:auto; margin:0; padding:9px 13px; background:#eef2ff; color:#1e3a8a; border:1px solid #dbeafe; }
+    .stats { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin:14px 0; }
+    .stat { background:#f9fafb; border:1px solid var(--line); border-radius:16px; padding:14px; text-align:center; }
+    .stat span { display:block; font-size:25px; font-weight:900; color:var(--blue); }
+    .tabs { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; }
+    .tab { width:auto; margin:0; padding:10px 14px; background:#eef2ff; color:#1e3a8a; }
     .tab.active { background:var(--blue); color:white; }
-    .toolbar-note { margin-inline-start:auto; color:var(--gray); font-size:13px; }
-    table { width:100%; border-collapse:collapse; margin-top:12px; direction:ltr; }
-    th, td { border-bottom:1px solid var(--line); padding:10px; text-align:left; font-size:13px; vertical-align:top; }
-    th { background:#f9fafb; position:sticky; top:0; z-index:1; }
-    .table-wrap { overflow:auto; max-height:680px; border:1px solid var(--line); border-radius:14px; }
-    img.thumb, video.thumb { width:72px; height:72px; object-fit:cover; border-radius:10px; background:#111827; }
-    .type-badge, .status-badge { display:inline-block; padding:4px 8px; border-radius:999px; color:white; font-size:12px; font-weight:700; white-space:nowrap; }
-    .type-image { background:var(--green); } .type-video { background:var(--red); }
-    .status-queued { background:var(--blue); } .status-published { background:var(--green); } .status-failed { background:var(--red); } .status-ready_now { background:#9333ea; } .status-unknown { background:#6b7280; }
-    .mini-actions { display:flex; gap:6px; flex-wrap:wrap; min-width:180px; }
-    .mini-actions button { width:auto; margin:0; padding:7px 9px; font-size:12px; border-radius:8px; }
-    .caption-cell { max-width:260px; white-space:pre-wrap; direction:rtl; text-align:right; }
-    .error-cell { max-width:260px; color:#991b1b; white-space:pre-wrap; }
-    .cards-list { display:none; gap:12px; }
-    .post-card { border:1px solid var(--line); border-radius:16px; padding:12px; background:#fff; }
-    .post-card-top { display:flex; gap:12px; align-items:flex-start; }
-    .post-card-body { flex:1; min-width:0; }
-    .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; padding:14px; z-index:20; }
-    .modal { background:white; width:min(620px,100%); border-radius:18px; padding:20px; box-shadow:0 30px 80px rgba(0,0,0,.25); }
-    .modal-actions { display:flex; gap:10px; justify-content:flex-start; }
-    .modal-actions button { width:auto; padding:10px 14px; }
-    @media (max-width:760px) {
-      .row, .filters-row, .stats-row { grid-template-columns:1fr; }
-      .table-wrap { display:none; }
-      .cards-list { display:grid; }
-      .actions-row button { flex:1; }
-      .toolbar-note { width:100%; margin:0; }
-    }
+    .filters { display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:10px; align-items:end; }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; margin:14px 0; align-items:center; }
+    .actions button { width:auto; margin:0; padding:10px 14px; }
+    .danger { background:var(--red)!important; }
+    .secondary { background:#4b5563!important; }
+    .success { background:var(--green)!important; }
+    .purple { background:#9333ea!important; }
+    .selected-info { color:var(--gray); font-size:13px; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+    .post { border:1px solid var(--line); border-radius:18px; overflow:hidden; background:white; display:flex; flex-direction:column; min-height:100%; }
+    .media { height:210px; background:#111827; display:flex; align-items:center; justify-content:center; position:relative; }
+    .media img,.media video { width:100%; height:100%; object-fit:cover; }
+    .check { position:absolute; top:10px; right:10px; width:22px; height:22px; margin:0; accent-color:var(--blue); }
+    .body { padding:13px; display:flex; flex-direction:column; gap:8px; flex:1; }
+    .badges { display:flex; gap:6px; flex-wrap:wrap; direction:ltr; justify-content:flex-end; }
+    .badge { display:inline-block; padding:4px 9px; border-radius:999px; color:white; font-size:12px; font-weight:900; }
+    .b-image { background:#059669; } .b-video { background:#dc2626; } .b-queued { background:#2563eb; } .b-published { background:#16a34a; } .b-failed { background:#dc2626; } .b-ready_now { background:#9333ea; }
+    .caption { line-height:1.5; max-height:70px; overflow:auto; background:#f9fafb; padding:8px; border-radius:10px; white-space:pre-wrap; }
+    .meta { font-size:13px; color:#374151; direction:ltr; text-align:right; }
+    .error { color:#b91c1c; background:#fee2e2; padding:8px; border-radius:10px; font-size:12px; direction:ltr; text-align:left; max-height:70px; overflow:auto; }
+    .post-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:auto; }
+    .post-actions button { margin:0; padding:9px; font-size:13px; }
+    dialog { border:none; border-radius:18px; padding:0; width:min(620px,94vw); box-shadow:0 20px 70px rgba(0,0,0,.3); }
+    dialog::backdrop { background:rgba(15,23,42,.45); }
+    .modal { padding:20px; }
+    .empty { padding:28px; text-align:center; color:var(--gray); background:#f9fafb; border-radius:16px; border:1px dashed #d1d5db; }
+    @media (max-width:900px){ .grid{grid-template-columns:repeat(2,1fr);} .filters,.stats{grid-template-columns:1fr 1fr;} }
+    @media (max-width:620px){ .wrap{margin:8px auto;padding:8px;} .card{padding:15px;border-radius:16px;} .row,.filters,.stats,.grid{grid-template-columns:1fr;} .media{height:230px;} .actions button{flex:1;} }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>🚀 لوحة جدولة إنستغرام</h1>
-      <div class="small">التوقيت المستخدم: الكويت Asia/Kuwait</div>
+      <div class="topbar">
+        <div>
+          <h1>🚀 لوحة جدولة إنستغرام</h1>
+          <div class="small">التوقيت المستخدم: الكويت Asia/Kuwait</div>
+        </div>
+        <button style="width:auto;margin:0" onclick="loadPosts()">تحديث</button>
+      </div>
       <form id="scheduleForm">
         <label>الصور / الفيديوهات</label>
-        <input type="file" name="images" accept="image/*,video/mp4,video/quicktime" multiple required />
+        <input type="file" name="images" accept="image/*,video/mp4,video/quicktime,video/webm" multiple required />
         <label>الكابشن</label>
         <textarea name="caption" placeholder="اكتبي الكابشن هنا..."></textarea>
         <div class="row">
@@ -86,176 +85,126 @@
 
     <div class="card">
       <h2>📋 إدارة المنشورات</h2>
-      <div class="stats-row">
-        <div class="stat-box"><span id="countAll">0</span><small>الكل</small></div>
-        <div class="stat-box"><span id="countQueued">0</span><small>مجدول</small></div>
-        <div class="stat-box"><span id="countPublished">0</span><small>منشور</small></div>
-        <div class="stat-box"><span id="countFailed">0</span><small>فشل</small></div>
-        <div class="stat-box"><span id="countVideos">0</span><small>فيديو</small></div>
+      <div class="stats">
+        <div class="stat"><span id="countAll">0</span><small>الكل</small></div>
+        <div class="stat"><span id="countQueued">0</span><small>مجدول</small></div>
+        <div class="stat"><span id="countPublished">0</span><small>منشور</small></div>
+        <div class="stat"><span id="countFailed">0</span><small>فشل</small></div>
+        <div class="stat"><span id="countVideos">0</span><small>فيديو</small></div>
       </div>
-
-      <div class="tabs">
-        <button class="tab active" data-status="all" onclick="setStatusTab('all')">الكل</button>
-        <button class="tab" data-status="queued" onclick="setStatusTab('queued')">مجدول</button>
-        <button class="tab" data-status="published" onclick="setStatusTab('published')">منشور</button>
-        <button class="tab" data-status="failed" onclick="setStatusTab('failed')">فشل</button>
-        <button class="tab" data-status="ready_now" onclick="setStatusTab('ready_now')">جاهز الآن</button>
-      </div>
-
-      <div class="filters-row">
-        <div><label>بحث بالكابشن أو اسم الملف</label><input type="text" id="searchBox" placeholder="اكتبي كلمة للبحث..." oninput="renderPosts()" /></div>
-        <div><label>الحالة</label><select id="statusFilter" onchange="syncTabs(); renderPosts()"><option value="all">الكل</option><option value="queued">مجدول</option><option value="published">منشور</option><option value="failed">فشل</option><option value="ready_now">جاهز الآن</option></select></div>
+      <div class="tabs" id="tabs"></div>
+      <div class="filters">
+        <div><label>بحث بالكابشن</label><input id="searchBox" placeholder="ابحثي..." oninput="renderPosts()"></div>
         <div><label>النوع</label><select id="typeFilter" onchange="renderPosts()"><option value="all">كل الأنواع</option><option value="image">صور</option><option value="video">فيديو</option></select></div>
-        <div><label>الترتيب</label><select id="sortFilter" onchange="renderPosts()"><option value="scheduledAsc">الأقرب للنشر</option><option value="scheduledDesc">الأبعد للنشر</option><option value="createdDesc">الأحدث إضافة</option><option value="createdAsc">الأقدم إضافة</option><option value="publishedDesc">الأحدث نشرًا</option></select></div>
+        <div><label>الترتيب</label><select id="sortFilter" onchange="renderPosts()"><option value="scheduledAsc">الأقرب للنشر</option><option value="scheduledDesc">الأبعد للنشر</option><option value="createdDesc">الأحدث إضافة</option><option value="createdAsc">الأقدم إضافة</option></select></div>
+        <div><label>عرض</label><select id="limitFilter" onchange="renderPosts()"><option value="all">الكل</option><option value="12">12</option><option value="24">24</option><option value="48">48</option></select></div>
       </div>
-
-      <div class="actions-row">
-        <button onclick="loadPosts()">تحديث</button>
-        <button class="secondary-btn" onclick="toggleSelectAll()">تحديد الظاهر</button>
-        <button class="success-btn" onclick="bulkMarkQueued()">إرجاع المحدد للجدولة</button>
-        <button class="danger-btn" onclick="deleteSelected()">حذف المحدد</button>
-        <button class="danger-btn" onclick="clearScheduled()">حذف غير المنشور</button>
-        <span class="toolbar-note" id="visibleCount">0 منشور ظاهر</span>
+      <div class="actions">
+        <button class="secondary" onclick="toggleSelectAll()">تحديد / إلغاء الكل</button>
+        <button class="danger" onclick="deleteSelected()">حذف المحدد</button>
+        <button class="success" onclick="bulkStatus('queued')">إرجاع للجدولة</button>
+        <button class="purple" onclick="bulkStatus('ready_now')">جاهز للنشر الآن</button>
+        <span class="selected-info" id="selectedInfo">0 محدد</span>
       </div>
-
-      <div id="posts">جاري التحميل...</div>
+      <div id="posts" class="grid"></div>
     </div>
   </div>
 
-  <div class="modal-backdrop" id="editModal">
+  <dialog id="editDialog">
     <div class="modal">
       <h2>تعديل المنشور</h2>
-      <input type="hidden" id="editId" />
-      <label>الكابشن</label>
-      <textarea id="editCaption"></textarea>
-      <label>وقت الجدولة</label>
-      <input type="datetime-local" id="editScheduledAt" />
-      <div class="modal-actions">
-        <button onclick="saveEdit()">حفظ</button>
-        <button class="secondary-btn" onclick="closeEdit()">إلغاء</button>
+      <input type="hidden" id="editId">
+      <label>الكابشن</label><textarea id="editCaption"></textarea>
+      <label>وقت الجدولة</label><input type="datetime-local" id="editScheduledAt">
+      <div class="actions">
+        <button onclick="saveEdit()">حفظ التعديل</button>
+        <button class="secondary" onclick="editDialog.close()">إغلاق</button>
       </div>
     </div>
-  </div>
+  </dialog>
 
 <script>
-const form = document.getElementById("scheduleForm");
-const message = document.getElementById("message");
-const postsBox = document.getElementById("posts");
-const KUWAIT_TZ = "Asia/Kuwait";
+const form = document.getElementById('scheduleForm');
+const message = document.getElementById('message');
+const postsBox = document.getElementById('posts');
+const tabsBox = document.getElementById('tabs');
+const editDialog = document.getElementById('editDialog');
+const KUWAIT_TZ = 'Asia/Kuwait';
 let allPosts = [];
-let visiblePosts = [];
+let currentStatus = 'all';
+const statuses = [['all','الكل'],['queued','مجدولة'],['published','منشورة'],['failed','فاشلة'],['ready_now','جاهزة الآن']];
 
-function showMessage(text, ok = true) { message.className = "msg " + (ok ? "ok" : "err"); message.textContent = text; }
-function setBusy(btn, busyText = "جاري...") { if (!btn) return () => {}; const old = btn.textContent; btn.disabled = true; btn.textContent = busyText; return () => { btn.disabled = false; btn.textContent = old; }; }
+function showMessage(text, ok=true){ message.className='msg '+(ok?'ok':'err'); message.textContent=text; }
+function escapeHtml(text){ return String(text ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
+function getPostUrl(p){ return p.mediaUrl || p.imageUrl || p.videoUrl || p.media_url || p.video_url || ''; }
+function getPostType(p){ if(p.mediaType) return p.mediaType; if(p.videoUrl||p.video_url) return 'video'; return /\.(mp4|mov|webm)(\?|$)/i.test(getPostUrl(p))?'video':'image'; }
+function formatKuwaitTime(value){ if(!value) return '—'; const d=new Date(value); if(isNaN(d)) return '—'; return new Intl.DateTimeFormat('en-GB',{timeZone:KUWAIT_TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:true}).format(d).replace(',',''); }
+function toDatetimeLocal(value){ if(!value) return ''; const d=new Date(value); const parts=new Intl.DateTimeFormat('en-CA',{timeZone:KUWAIT_TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d).reduce((a,p)=>(a[p.type]=p.value,a),{}); return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`; }
+function badge(text, cls){ return `<span class="badge ${cls}">${text}</span>`; }
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const done = setBusy(form.querySelector('button[type="submit"]'), "جاري الرفع...");
-  showMessage("جاري الرفع والمعالجة...", true);
-  try {
-    const res = await fetch("/api/schedule", { method: "POST", body: new FormData(form) });
+function selectedIds(){ return Array.from(document.querySelectorAll('.check:checked')).map(x=>x.value); }
+function updateSelectedInfo(){ document.getElementById('selectedInfo').textContent = `${selectedIds().length} محدد`; }
+
+form.addEventListener('submit', async e => {
+  e.preventDefault(); showMessage('جاري الرفع...', true);
+  const data = new FormData(form);
+  try{
+    const res = await fetch('/api/schedule', {method:'POST', body:data});
     const json = await res.json();
-    if (!res.ok || !json.ok) return showMessage("خطأ: " + (json.message || "حدث خطأ"), false);
-    showMessage("تم بنجاح ✅\n" + json.message, true);
-    form.reset();
-    loadPosts();
-  } catch (err) { showMessage("خطأ اتصال: " + err.message, false); }
-  finally { done(); }
+    if(!res.ok || !json.ok) return showMessage('خطأ: '+(json.message||'حدث خطأ'), false);
+    showMessage('تم بنجاح ✅\n'+(json.message||''), true); form.reset(); loadPosts();
+  }catch(err){ showMessage('خطأ اتصال: '+err.message, false); }
 });
 
-function formatKuwaitTime(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("en-GB", { timeZone: KUWAIT_TZ, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:true }).format(d).replace(",", "");
+function renderTabs(){
+  tabsBox.innerHTML = statuses.map(([key,label]) => `<button class="tab ${currentStatus===key?'active':''}" onclick="currentStatus='${key}';renderTabs();renderPosts();">${label}</button>`).join('');
 }
-function toDatetimeLocal(value) {
-  if (!value) return "";
-  const d = new Date(value);
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: KUWAIT_TZ, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false }).formatToParts(d).reduce((a,p)=> (a[p.type]=p.value,a),{});
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+function updateStats(posts){
+  countAll.textContent=posts.length; countQueued.textContent=posts.filter(p=>p.status==='queued').length; countPublished.textContent=posts.filter(p=>p.status==='published').length; countFailed.textContent=posts.filter(p=>p.status==='failed').length; countVideos.textContent=posts.filter(p=>getPostType(p)==='video').length;
 }
-function kuwaitLocalToIso(value) { return value ? new Date(value + ":00+03:00").toISOString() : ""; }
-function escapeHtml(text) { return String(text).replace(/[&<>"']/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m])); }
-function getPostType(p) { if (p.mediaType) return p.mediaType; if (p.videoUrl || p.video_url) return "video"; const url = p.mediaUrl || p.imageUrl || ""; return /\.(mp4|mov|webm)(\?|$)/i.test(url) ? "video" : "image"; }
-function getPostUrl(p) { return p.mediaUrl || p.imageUrl || p.videoUrl || p.media_url || p.video_url || ""; }
-function getTypeBadge(type) { return type === "video" ? '<span class="type-badge type-video">VIDEO</span>' : '<span class="type-badge type-image">IMAGE</span>'; }
-function getStatusBadge(status) { const labels = { queued:"مجدول", published:"منشور", failed:"فشل", ready_now:"جاهز الآن" }; const safe = status || "unknown"; return `<span class="status-badge status-${safe}">${labels[safe] || safe}</span>`; }
+function mediaPreview(p){ const url=getPostUrl(p); if(!url) return '<div class="small">لا يوجد ملف</div>'; return getPostType(p)==='video' ? `<video src="${escapeHtml(url)}" controls muted playsinline></video>` : `<img src="${escapeHtml(url)}" alt="preview">`; }
+function filteredPosts(){
+  const search=(searchBox.value||'').toLowerCase(); const type=typeFilter.value; const sort=sortFilter.value;
+  let posts=[...allPosts].filter(p => (currentStatus==='all'||p.status===currentStatus) && (type==='all'||getPostType(p)===type) && (!search||String(p.caption||'').toLowerCase().includes(search)));
+  posts.sort((a,b)=>{ const sa=new Date(a.scheduledAt||0), sb=new Date(b.scheduledAt||0), ca=new Date(a.createdAt||0), cb=new Date(b.createdAt||0); if(sort==='scheduledDesc') return sb-sa; if(sort==='createdDesc') return cb-ca; if(sort==='createdAsc') return ca-cb; return sa-sb; });
+  const limit=limitFilter.value; return limit==='all'?posts:posts.slice(0, Number(limit));
+}
+function renderPosts(){
+  const posts=filteredPosts();
+  if(!posts.length){ postsBox.className=''; postsBox.innerHTML='<div class="empty">لا توجد منشورات مطابقة.</div>'; updateSelectedInfo(); return; }
+  postsBox.className='grid';
+  postsBox.innerHTML = posts.map(p => {
+    const type=getPostType(p), url=getPostUrl(p);
+    return `<article class="post">
+      <div class="media"><input class="check" type="checkbox" value="${escapeHtml(p.id)}" onchange="updateSelectedInfo()">${mediaPreview(p)}</div>
+      <div class="body">
+        <div class="badges">${badge(type.toUpperCase(), type==='video'?'b-video':'b-image')}${badge(p.status||'unknown','b-'+(p.status||''))}</div>
+        <div class="meta">🕒 ${formatKuwaitTime(p.scheduledAt)}</div>
+        <div class="caption">${escapeHtml(p.caption || 'بدون كابشن')}</div>
+        ${p.error ? `<div class="error">${escapeHtml(p.error)}</div>` : ''}
+        <div class="post-actions">
+          <button onclick="openEdit('${escapeHtml(p.id)}')">تعديل</button>
+          <button class="success" onclick="publishExisting('${escapeHtml(p.id)}')">نشر الآن</button>
+          <button class="secondary" onclick="setStatus('${escapeHtml(p.id)}','queued')">جدولة</button>
+          <button class="danger" onclick="deletePost('${escapeHtml(p.id)}')">حذف</button>
+        </div>
+      </div>
+    </article>`;
+  }).join('');
+  updateSelectedInfo();
+}
+async function loadPosts(){ postsBox.className=''; postsBox.innerHTML='<div class="empty">جاري التحميل...</div>'; try{ const res=await fetch('/api/posts?ts='+Date.now()); allPosts=await res.json(); updateStats(allPosts); renderTabs(); renderPosts(); }catch(err){ postsBox.innerHTML='<div class="empty">خطأ في تحميل القائمة: '+escapeHtml(err.message)+'</div>'; } }
+function toggleSelectAll(){ const boxes=Array.from(document.querySelectorAll('.check')); const check=boxes.some(b=>!b.checked); boxes.forEach(b=>b.checked=check); updateSelectedInfo(); }
+async function apiJson(url, options={}){ const res=await fetch(url,{headers:{'Content-Type':'application/json'},...options}); const json=await res.json().catch(()=>({})); if(!res.ok || json.ok===false) throw new Error(json.message||'حدث خطأ'); return json; }
+async function deletePost(id){ if(!confirm('حذف هذا المنشور؟')) return; try{ await apiJson('/api/posts/'+id,{method:'DELETE'}); showMessage('تم الحذف ✅'); loadPosts(); }catch(err){ showMessage('خطأ: '+err.message,false); } }
+async function deleteSelected(){ const ids=selectedIds(); if(!ids.length) return showMessage('اختاري منشور واحد على الأقل',false); if(!confirm('حذف المنشورات المحددة؟')) return; try{ const j=await apiJson('/api/posts/bulk-delete',{method:'POST',body:JSON.stringify({ids})}); showMessage(j.message||'تم الحذف ✅'); loadPosts(); }catch(err){ showMessage('خطأ: '+err.message,false); } }
+async function bulkStatus(status){ const ids=selectedIds(); if(!ids.length) return showMessage('اختاري منشور واحد على الأقل',false); try{ const j=await apiJson('/api/posts/bulk-status',{method:'POST',body:JSON.stringify({ids,status})}); showMessage(j.message||'تم التحديث ✅'); loadPosts(); }catch(err){ showMessage('خطأ: '+err.message,false); } }
+async function setStatus(id,status){ try{ await apiJson('/api/posts/'+id,{method:'PATCH',body:JSON.stringify({status})}); showMessage('تم تحديث الحالة ✅'); loadPosts(); }catch(err){ showMessage('خطأ: '+err.message,false); } }
+function openEdit(id){ const p=allPosts.find(x=>String(x.id)===String(id)); if(!p) return; editId.value=p.id; editCaption.value=p.caption||''; editScheduledAt.value=toDatetimeLocal(p.scheduledAt); editDialog.showModal(); }
+async function saveEdit(){ try{ const payload={caption:editCaption.value, scheduledAt:editScheduledAt.value}; const j=await apiJson('/api/posts/'+editId.value,{method:'PATCH',body:JSON.stringify(payload)}); editDialog.close(); showMessage(j.message||'تم الحفظ ✅'); loadPosts(); }catch(err){ showMessage('خطأ: '+err.message,false); } }
+async function publishExisting(id){ if(!confirm('نشر هذا المنشور الآن على إنستغرام؟')) return; try{ showMessage('جاري محاولة النشر...',true); const j=await apiJson('/api/posts/'+id+'/publish-now',{method:'POST'}); showMessage(j.message||'تم النشر ✅'); loadPosts(); }catch(err){ showMessage('فشل النشر: '+err.message,false); loadPosts(); } }
 
-function updateStats(posts) {
-  countAll.textContent = posts.length;
-  countQueued.textContent = posts.filter(p => p.status === "queued").length;
-  countPublished.textContent = posts.filter(p => p.status === "published").length;
-  countFailed.textContent = posts.filter(p => p.status === "failed").length;
-  countVideos.textContent = posts.filter(p => getPostType(p) === "video").length;
-}
-function renderMediaPreview(p) {
-  const url = getPostUrl(p); if (!url) return "";
-  return getPostType(p) === "video" ? `<a href="${url}" target="_blank"><video class="thumb" src="${url}" muted playsinline controls></video></a>` : `<a href="${url}" target="_blank"><img class="thumb" src="${url}"></a>`;
-}
-function syncTabs() { document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.status === statusFilter.value)); }
-function setStatusTab(value) { statusFilter.value = value; syncTabs(); renderPosts(); }
-
-function getFilteredPosts() {
-  const search = (searchBox.value || "").toLowerCase();
-  let posts = allPosts.filter(p => {
-    const haystack = `${p.caption || ""} ${p.originalName || ""} ${p.error || ""}`.toLowerCase();
-    return (statusFilter.value === "all" || p.status === statusFilter.value) && (typeFilter.value === "all" || getPostType(p) === typeFilter.value) && (!search || haystack.includes(search));
-  });
-  posts.sort((a,b) => {
-    if (sortFilter.value === "scheduledDesc") return new Date(b.scheduledAt || 0) - new Date(a.scheduledAt || 0);
-    if (sortFilter.value === "createdDesc") return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    if (sortFilter.value === "createdAsc") return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-    if (sortFilter.value === "publishedDesc") return new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0);
-    return new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0);
-  });
-  return posts;
-}
-
-function renderPosts() {
-  visiblePosts = getFilteredPosts();
-  visibleCount.textContent = `${visiblePosts.length} منشور ظاهر`;
-  if (!visiblePosts.length) { postsBox.innerHTML = "<p>لا توجد منشورات مطابقة للفلاتر.</p>"; return; }
-  const rows = visiblePosts.map(p => `
-    <tr>
-      <td><input type="checkbox" class="post-check" value="${p.id}"></td>
-      <td>${renderMediaPreview(p)}</td><td>${getTypeBadge(getPostType(p))}</td><td>${getStatusBadge(p.status)}</td>
-      <td>${formatKuwaitTime(p.scheduledAt)}</td><td>${formatKuwaitTime(p.publishedAt)}</td>
-      <td class="caption-cell">${escapeHtml(p.caption || "")}</td><td class="error-cell">${escapeHtml(p.error || "")}</td>
-      <td><div class="mini-actions"><button onclick="openEdit('${p.id}')">تعديل</button><button class="success-btn" onclick="publishExisting('${p.id}')">نشر الآن</button><button class="danger-btn" onclick="deletePost('${p.id}')">حذف</button></div></td>
-    </tr>`).join("");
-  const cards = visiblePosts.map(p => `
-    <div class="post-card">
-      <div class="post-card-top"><input type="checkbox" class="post-check" value="${p.id}">${renderMediaPreview(p)}<div class="post-card-body"><div>${getTypeBadge(getPostType(p))} ${getStatusBadge(p.status)}</div><div class="small">جدولة: ${formatKuwaitTime(p.scheduledAt) || "-"}</div><div class="small">نشر: ${formatKuwaitTime(p.publishedAt) || "-"}</div></div></div>
-      <p class="caption-cell">${escapeHtml(p.caption || "")}</p>${p.error ? `<p class="error-cell">${escapeHtml(p.error)}</p>` : ""}
-      <div class="mini-actions"><button onclick="openEdit('${p.id}')">تعديل</button><button class="success-btn" onclick="publishExisting('${p.id}')">نشر الآن</button><button class="danger-btn" onclick="deletePost('${p.id}')">حذف</button></div>
-    </div>`).join("");
-  postsBox.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Select</th><th>Preview</th><th>Type</th><th>Status</th><th>Scheduled</th><th>Published</th><th>Caption</th><th>Error</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div><div class="cards-list">${cards}</div>`;
-}
-
-async function apiJson(url, options = {}) {
-  const res = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || json.ok === false) throw new Error(json.message || "حدث خطأ");
-  return json;
-}
-async function loadPosts() {
-  postsBox.innerHTML = "جاري التحميل...";
-  try { allPosts = await (await fetch("/api/posts?ts=" + Date.now())).json(); updateStats(allPosts); renderPosts(); }
-  catch (err) { postsBox.innerHTML = "خطأ في تحميل القائمة: " + err.message; }
-}
-function selectedIds() { return Array.from(document.querySelectorAll(".post-check:checked")).map(x => x.value); }
-function toggleSelectAll() { const boxes = Array.from(document.querySelectorAll(".post-check")); const shouldCheck = boxes.some(b => !b.checked); boxes.forEach(b => b.checked = shouldCheck); }
-async function deletePost(id) { if (!confirm("هل تريدين حذف هذا المنشور؟")) return; try { await apiJson("/api/posts/" + id, { method:"DELETE" }); showMessage("تم حذف المنشور ✅", true); loadPosts(); } catch(e){ showMessage("خطأ: " + e.message, false); } }
-async function deleteSelected() { const ids = selectedIds(); if (!ids.length) return showMessage("اختاري منشور واحد على الأقل", false); if (!confirm(`هل تريدين حذف ${ids.length} منشور؟`)) return; try { const j = await apiJson("/api/posts/bulk-delete", { method:"POST", body: JSON.stringify({ ids }) }); showMessage(j.message, true); loadPosts(); } catch(e){ showMessage("خطأ: " + e.message, false); } }
-async function bulkMarkQueued() { const ids = selectedIds(); if (!ids.length) return showMessage("اختاري منشور واحد على الأقل", false); try { const j = await apiJson("/api/posts/bulk-status", { method:"POST", body: JSON.stringify({ ids, status:"queued" }) }); showMessage(j.message, true); loadPosts(); } catch(e){ showMessage("خطأ: " + e.message, false); } }
-async function clearScheduled() { if (!confirm("سيتم حذف كل المنشورات غير المنشورة: المجدولة/الفاشلة/جاهزة الآن. هل أنت متأكدة؟")) return; try { const j = await apiJson("/api/clear-scheduled", { method:"POST" }); showMessage(j.message || "تم الحذف", true); loadPosts(); } catch(e){ showMessage("خطأ: " + e.message, false); } }
-async function publishExisting(id) { if (!confirm("نشر هذا المنشور الآن؟")) return; try { const j = await apiJson(`/api/posts/${id}/publish-now`, { method:"POST" }); showMessage(j.message, true); loadPosts(); } catch(e){ showMessage("فشل النشر: " + e.message, false); loadPosts(); } }
-function openEdit(id) { const p = allPosts.find(x => String(x.id) === String(id)); if (!p) return; editId.value = p.id; editCaption.value = p.caption || ""; editScheduledAt.value = toDatetimeLocal(p.scheduledAt); editModal.style.display = "flex"; }
-function closeEdit() { editModal.style.display = "none"; }
-async function saveEdit() { try { const body = { caption: editCaption.value, scheduledAt: kuwaitLocalToIso(editScheduledAt.value) }; const j = await apiJson(`/api/posts/${editId.value}`, { method:"PATCH", body: JSON.stringify(body) }); showMessage(j.message, true); closeEdit(); loadPosts(); } catch(e){ showMessage("خطأ في التعديل: " + e.message, false); } }
-editModal.addEventListener('click', e => { if (e.target === editModal) closeEdit(); });
-loadPosts();
+renderTabs(); loadPosts();
 </script>
 </body>
 </html>
