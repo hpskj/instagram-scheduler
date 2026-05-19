@@ -24,7 +24,30 @@
     th, td { border-bottom:1px solid #e5e7eb; padding:10px; text-align:left; font-size:13px; vertical-align:top; }
     img.thumb { width:58px; height:58px; object-fit:cover; border-radius:8px; }
     .small { color:#6b7280; font-size:13px; }
-    @media (max-width:720px) { .row { grid-template-columns:1fr; } }
+
+    .admin-tools { margin:16px 0 18px; }
+    .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:14px; }
+    .stat-box { background:#f3f4f6; border:1px solid #e5e7eb; border-radius:14px; padding:12px; text-align:center; }
+    .stat-box span { display:block; font-size:24px; font-weight:800; color:#2563eb; }
+    .stat-box small { color:#6b7280; }
+    .filters-row { display:grid; grid-template-columns:2fr 1fr 1fr 1fr; gap:10px; align-items:end; margin-bottom:12px; }
+    .actions-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+    .actions-row button { width:auto; padding:10px 14px; margin-top:0; }
+    .danger-btn { background:#dc2626 !important; }
+    .danger-btn:hover { background:#b91c1c !important; }
+    .secondary-btn { background:#4b5563 !important; }
+    .secondary-btn:hover { background:#374151 !important; }
+    .type-badge, .status-badge { display:inline-block; padding:4px 8px; border-radius:999px; color:white; font-size:12px; font-weight:700; }
+    .type-image { background:#16a34a; }
+    .type-video { background:#dc2626; }
+    .status-queued { background:#2563eb; }
+    .status-published { background:#16a34a; }
+    .status-failed { background:#dc2626; }
+    .status-ready_now { background:#9333ea; }
+    video.thumb { width:72px; height:72px; object-fit:cover; border-radius:8px; background:#111827; }
+    .table-wrap { overflow-x:auto; }
+
+    @media (max-width:720px) { .row, .filters-row, .stats-row { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -62,8 +85,56 @@
 
     <div class="card">
       <h2>📋 المنشورات</h2>
-      <button onclick="loadPosts()">تحديث القائمة</button>
-      <button onclick="deleteSelected()" style="background:#dc2626;margin-right:10px;">حذف المحدد</button>
+
+      <div class="admin-tools">
+        <div class="stats-row">
+          <div class="stat-box"><span id="countAll">0</span><small>الكل</small></div>
+          <div class="stat-box"><span id="countQueued">0</span><small>مجدول</small></div>
+          <div class="stat-box"><span id="countPublished">0</span><small>منشور</small></div>
+          <div class="stat-box"><span id="countVideos">0</span><small>فيديو</small></div>
+        </div>
+
+        <div class="filters-row">
+          <div>
+            <label>بحث بالكابشن</label>
+            <input type="text" id="searchBox" placeholder="اكتبي كلمة للبحث..." oninput="renderPosts()" />
+          </div>
+          <div>
+            <label>الحالة</label>
+            <select id="statusFilter" onchange="renderPosts()">
+              <option value="all">الكل</option>
+              <option value="queued">مجدول</option>
+              <option value="published">منشور</option>
+              <option value="failed">فشل</option>
+              <option value="ready_now">جاهز الآن</option>
+            </select>
+          </div>
+          <div>
+            <label>النوع</label>
+            <select id="typeFilter" onchange="renderPosts()">
+              <option value="all">كل الأنواع</option>
+              <option value="image">صور</option>
+              <option value="video">فيديو</option>
+            </select>
+          </div>
+          <div>
+            <label>الترتيب</label>
+            <select id="sortFilter" onchange="renderPosts()">
+              <option value="scheduledAsc">الأقرب للنشر</option>
+              <option value="scheduledDesc">الأبعد للنشر</option>
+              <option value="createdDesc">الأحدث إضافة</option>
+              <option value="createdAsc">الأقدم إضافة</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="actions-row">
+          <button onclick="loadPosts()">تحديث القائمة</button>
+          <button class="secondary-btn" onclick="toggleSelectAll()">تحديد الكل</button>
+          <button class="danger-btn" onclick="deleteSelected()">حذف المحدد</button>
+        </div>
+      </div>
+
       <div id="posts"></div>
     </div>
   </div>
@@ -73,6 +144,7 @@ const form = document.getElementById("scheduleForm");
 const message = document.getElementById("message");
 const postsBox = document.getElementById("posts");
 const KUWAIT_TZ = "Asia/Kuwait";
+let allPosts = [];
 
 function showMessage(text, ok = true) {
   message.className = "msg " + (ok ? "ok" : "err");
@@ -146,7 +218,11 @@ async function deleteSelected() {
 
   try {
     for (const item of checked) {
-      await fetch("/api/posts/" + item.value, { method: "DELETE" });
+      const res = await fetch("/api/posts/" + item.value, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || json.ok === false) {
+        throw new Error(json.message || "فشل حذف أحد المنشورات");
+      }
     }
 
     showMessage("تم حذف المنشورات المحددة ✅", true);
@@ -156,22 +232,92 @@ async function deleteSelected() {
   }
 }
 
-async function loadPosts() {
-  postsBox.innerHTML = "جاري التحميل...";
-  try {
-    const res = await fetch("/api/posts?ts=" + Date.now());
-    const posts = await res.json();
+function toggleSelectAll() {
+  const boxes = Array.from(document.querySelectorAll(".post-check"));
+  const shouldCheck = boxes.some(box => !box.checked);
+  boxes.forEach(box => box.checked = shouldCheck);
+}
 
-    if (!posts.length) {
-      postsBox.innerHTML = "<p>لا توجد منشورات حتى الآن.</p>";
-      return;
-    }
 
-    postsBox.innerHTML = `
+function getPostType(p) {
+  if (p.mediaType) return p.mediaType;
+  if (p.media_type) return p.media_type;
+  if (p.videoUrl || p.video_url) return "video";
+  const url = p.mediaUrl || p.imageUrl || "";
+  return /\.(mp4|mov|webm)(\?|$)/i.test(url) ? "video" : "image";
+}
+
+function getPostUrl(p) {
+  return p.mediaUrl || p.imageUrl || p.videoUrl || p.media_url || p.video_url || "";
+}
+
+function getTypeBadge(type) {
+  return type === "video"
+    ? '<span class="type-badge type-video">VIDEO</span>'
+    : '<span class="type-badge type-image">IMAGE</span>';
+}
+
+function getStatusBadge(status) {
+  const safe = status || "unknown";
+  return `<span class="status-badge status-${safe}">${safe}</span>`;
+}
+
+function updateStats(posts) {
+  document.getElementById("countAll").textContent = posts.length;
+  document.getElementById("countQueued").textContent = posts.filter(p => p.status === "queued").length;
+  document.getElementById("countPublished").textContent = posts.filter(p => p.status === "published").length;
+  document.getElementById("countVideos").textContent = posts.filter(p => getPostType(p) === "video").length;
+}
+
+function renderMediaPreview(p) {
+  const type = getPostType(p);
+  const url = getPostUrl(p);
+
+  if (!url) return "";
+
+  if (type === "video") {
+    return `<a href="${url}" target="_blank"><video class="thumb" src="${url}" muted playsinline controls></video></a>`;
+  }
+
+  return `<a href="${url}" target="_blank"><img class="thumb" src="${url}"></a>`;
+}
+
+function renderPosts() {
+  const search = (document.getElementById("searchBox")?.value || "").toLowerCase();
+  const statusFilter = document.getElementById("statusFilter")?.value || "all";
+  const typeFilter = document.getElementById("typeFilter")?.value || "all";
+  const sortFilter = document.getElementById("sortFilter")?.value || "scheduledAsc";
+
+  let posts = [...allPosts];
+
+  posts = posts.filter(p => {
+    const caption = String(p.caption || "").toLowerCase();
+    const statusOk = statusFilter === "all" || p.status === statusFilter;
+    const typeOk = typeFilter === "all" || getPostType(p) === typeFilter;
+    const searchOk = !search || caption.includes(search);
+    return statusOk && typeOk && searchOk;
+  });
+
+  posts.sort((a, b) => {
+    if (sortFilter === "scheduledDesc") return new Date(b.scheduledAt || 0) - new Date(a.scheduledAt || 0);
+    if (sortFilter === "createdDesc") return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    if (sortFilter === "createdAsc") return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+    return new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0);
+  });
+
+  if (!posts.length) {
+    postsBox.innerHTML = "<p>لا توجد منشورات مطابقة للفلاتر.</p>";
+    return;
+  }
+
+  postsBox.innerHTML = `
+    <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Select</th><th>Image</th>
+            <th>Select</th>
+            <th>Preview</th>
+            <th>Type</th>
             <th>Status</th>
             <th>Scheduled Kuwait Time</th>
             <th>Caption</th>
@@ -180,20 +326,41 @@ async function loadPosts() {
           </tr>
         </thead>
         <tbody>
-          ${posts.map(p => `
-            <tr>
-              <td><input type="checkbox" class="post-check" value="${p.id}"></td>
-              <td><a href="${p.imageUrl}" target="_blank"><img class="thumb" src="${p.imageUrl}"></a></td>
-              <td>${p.status}</td>
-              <td>${formatKuwaitTime(p.scheduledAt)}</td>
-              <td>${escapeHtml(p.caption || "")}</td>
-              <td>${escapeHtml(p.error || "")}</td>
-              <td><button class="delete-btn" onclick="deletePost('${p.id}')">حذف</button></td>
-            </tr>
-          `).join("")}
+          ${posts.map(p => {
+            const type = getPostType(p);
+            return `
+              <tr>
+                <td><input type="checkbox" class="post-check" value="${p.id}"></td>
+                <td>${renderMediaPreview(p)}</td>
+                <td>${getTypeBadge(type)}</td>
+                <td>${getStatusBadge(p.status)}</td>
+                <td>${formatKuwaitTime(p.scheduledAt)}</td>
+                <td>${escapeHtml(p.caption || "")}</td>
+                <td>${escapeHtml(p.error || "")}</td>
+                <td><button class="delete-btn" onclick="deletePost('${p.id}')">حذف</button></td>
+              </tr>
+            `;
+          }).join("")}
         </tbody>
       </table>
-    `;
+    </div>
+  `;
+}
+
+async function loadPosts() {
+  postsBox.innerHTML = "جاري التحميل...";
+  try {
+    const res = await fetch("/api/posts?ts=" + Date.now());
+    allPosts = await res.json();
+
+    updateStats(allPosts);
+
+    if (!allPosts.length) {
+      postsBox.innerHTML = "<p>لا توجد منشورات حتى الآن.</p>";
+      return;
+    }
+
+    renderPosts();
   } catch (err) {
     postsBox.innerHTML = "خطأ في تحميل القائمة: " + err.message;
   }
