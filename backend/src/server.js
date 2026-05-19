@@ -62,6 +62,20 @@ function writePosts(posts) {
   fs.writeFileSync(dbFile, JSON.stringify(posts, null, 2));
 }
 
+function normalizePostForClient(post) {
+  return {
+    ...post,
+    mediaUrl: getMediaUrlFromPost(post),
+    mediaType: getMediaTypeFromPost(post),
+  };
+}
+
+function safeDateOrNull(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function makeId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
@@ -479,19 +493,125 @@ app.get("/health", (req, res) => {
 });
 
 app.get("/api/posts", (req, res) => {
-  const posts = readPosts().sort(
-    (a, b) => new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0)
-  );
+  const posts = readPosts()
+    .map(normalizePostForClient)
+    .sort((a, b) => new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0));
 
   res.json(posts);
 });
 
 app.get("/api/scheduled-posts", (req, res) => {
-  const posts = readPosts().sort(
-    (a, b) => new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0)
-  );
+  const posts = readPosts()
+    .map(normalizePostForClient)
+    .sort((a, b) => new Date(a.scheduledAt || 0) - new Date(b.scheduledAt || 0));
 
   res.json({ ok: true, posts });
+});
+
+
+app.patch("/api/posts/:id", (req, res) => {
+  const posts = readPosts();
+  const post = posts.find((p) => p.id === req.params.id);
+
+  if (!post) {
+    return res.status(404).json({ ok: false, message: "Post not found" });
+  }
+
+  const { caption, scheduledAt, status } = req.body || {};
+
+  if (typeof caption === "string") {
+    post.caption = caption;
+  }
+
+  if (scheduledAt !== undefined && scheduledAt !== "") {
+    const d = safeDateOrNull(scheduledAt);
+    if (!d) return res.status(400).json({ ok: false, message: "Invalid scheduledAt date" });
+    post.scheduledAt = d.toISOString();
+    post.publishAt = d.toISOString();
+    if (post.status === "failed" || post.status === "ready_now") post.status = "queued";
+    post.error = null;
+  }
+
+  if (typeof status === "string") {
+    const allowed = ["queued", "ready_now", "published", "failed"];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ ok: false, message: "Invalid status" });
+    }
+    post.status = status;
+  }
+
+  writePosts(posts);
+  res.json({ ok: true, message: "Post updated successfully ✅", post: normalizePostForClient(post) });
+});
+
+app.post("/api/posts/:id/publish-now", async (req, res) => {
+  const posts = readPosts();
+  const post = posts.find((p) => p.id === req.params.id);
+
+  if (!post) {
+    return res.status(404).json({ ok: false, message: "Post not found" });
+  }
+
+  try {
+    const ig = await publishToInstagram(
+      getMediaUrlFromPost(post),
+      post.caption,
+      getMediaTypeFromPost(post)
+    );
+
+    post.status = "published";
+    post.publishedAt = new Date().toISOString();
+    post.instagramPostId = ig.id;
+    post.error = null;
+    writePosts(posts);
+
+    res.json({ ok: true, message: "Published successfully ✅", instagramPostId: ig.id });
+  } catch (err) {
+    post.status = "failed";
+    post.error = err.message;
+    writePosts(posts);
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+app.post("/api/posts/bulk-delete", (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+
+  if (!ids.length) {
+    return res.status(400).json({ ok: false, message: "No post IDs provided" });
+  }
+
+  const idSet = new Set(ids);
+  const posts = readPosts();
+  const updated = posts.filter((p) => !idSet.has(String(p.id)));
+  const deleted = posts.length - updated.length;
+
+  writePosts(updated);
+  res.json({ ok: true, message: `${deleted} posts deleted successfully ✅`, deleted });
+});
+
+app.post("/api/posts/bulk-status", (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+  const status = String(req.body?.status || "");
+  const allowed = ["queued", "ready_now", "published", "failed"];
+
+  if (!ids.length) return res.status(400).json({ ok: false, message: "No post IDs provided" });
+  if (!allowed.includes(status)) return res.status(400).json({ ok: false, message: "Invalid status" });
+
+  const idSet = new Set(ids);
+  const posts = readPosts();
+  let updatedCount = 0;
+
+  for (const post of posts) {
+    if (idSet.has(String(post.id))) {
+      post.status = status;
+      if (status === "queued" || status === "ready_now") post.error = null;
+      updatedCount++;
+    }
+  }
+
+  writePosts(posts);
+  res.json({ ok: true, message: `${updatedCount} posts updated successfully ✅`, updated: updatedCount });
 });
 
 app.delete("/api/posts/:id", (req, res) => {
